@@ -47,14 +47,29 @@
 	
 	  <div id="content">
         <div class="content_item">
-		  <h1>Welcome To Your Website</h1> 
-          <p>This standards compliant, simple, fixed width website template is released as an 'open source' design (under the Creative Commons Attribution 3.0 Licence), which means that you are free to download and use it for anything you want (including modifying and amending it). If you wish to remove the &ldquo;website template by Free HTML5 Templates&rdquo;, all I ask is for a donation of &pound;20.00 GBP. Please feel free to contact me with any questions you may have about my free HTML5 website templates or bespoke work.</p>   		
-		  
+		  <h1>Bienvenidos a nuestra proyecto.</h1>
+          <p>La principal motivaci&oacute;n para este proyecto es la de crear un sistema multiagente para la b&uacute;squeda, reparaci&oacute;n y limpieza
+          de posibles fugas de petr&oacute;leo que se detecten en el mar.</p>
+
+          <h2>Descripci&oacute;n del proyecto.</h2>
 		  <div class="content_imagetext">
 		    <div class="content_image">
-		      <img src="images/image1.jpg" alt="image1"/>
+		      <img src="images/submarine_description.jpg" alt="image1"/>
 	        </div>
-		    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Morbi elit sapien, tempus sit amet hendrerit volutpat, euismod vitae risus. Etiam consequat, sem et vulputate dapibus, diam enim tristique est, vitae porta eros mauris ut orci. Praesent sed velit odio. Ut massa arcu, suscipit viverra molestie at, aliquet a metus. Nullam sit amet tellus dui, ut tincidunt justo. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec iaculis egestas laoreet. Nunc non ipsum metus, non laoreet urna. Vestibulum quis risus quis diam mattis tempus. Vestibulum suscipit pretium tempor. </p>
+		    <p>
+                Cada submarino será un agente que se encargará de partir del lugar de donde se lancen todos los submarinos e ir a la
+                zona que le haya sido asignada para comenzar a explorarla. Antes de comenzar la simulación el usuario podrá añadir
+                obstáculos en forma de isla para complicar el trabajo de los submarinos. La fuga de petróleo será también un agente
+                que aparecerá en una zona aleatoria del mapa y se comenzará a mover lentamente también hacia una dirección aleatoria.
+                Si la fuga de petróleo choca contra una isla o contra una pared parará su movimiento en ese punto. Si pasa un cierto
+                tiempo sin que ningún submarino encuentre la fuga se permitirá que cada agente puede explorar fuera de su área.
+                Esto puede ser útil en aquellos casos en los que una isla divida el área asignada a un submarino en dos y la fuga se
+                encuentre en la parte que el submarino no puede explorar. Al eliminar las barreras cualquier submarino podrá ir a
+                detectar ese vertido.
+                Una vez que el vertido sea detectado el submarino que lo encuentre tendrá que avisar a los demás. Estos interrumpirán la
+                exploración que están realizando para ir al lugar donde se encontró el vertido. Cuando lleguen se pondrán a limpiar el
+                vertido y a localizar la fuga. Una vez se localice se reparará y los submarinos volverán al barco de donde salieron.
+		    </p>
 		  </div><!--close content_imagetext-->
 		  
 		  <div class="content_container">
