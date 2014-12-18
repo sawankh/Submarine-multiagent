@@ -1,3 +1,5 @@
+; Variables globales
+
 globals [numFugas posX posY numElem islaObstaculo dirViento dirVientoOpuesto petroleoDetectado posXPetrol posYPetrol pxF pyF fugaDibujada
   open ; the open list of patches
   closed ; the closed list of patches
@@ -8,10 +10,13 @@ globals [numFugas posX posY numElem islaObstaculo dirViento dirVientoOpuesto pet
   nuevosDescubrimientosPetrol ; lista que contiene las posiciones de nuevos vertidos descubiertos mientras se limpiaba otro
   ]
 
+; Razas
+
 breed [submarinos submarino]
 breed [fugas fuga]
 breed [manchas mancha]
 
+; Definición de la variables de cada agente 
 
 submarinos-own [
   posIniX
@@ -36,6 +41,8 @@ submarinos-own [
   idaVueltaBarco ; variable booleana que indica si el submarino esta en la tarea de llevar el petroleo y volver a la mancha
   manchaDetec ; variable que almacena la mancha que detecta al buscar petróleo
   parcheActual ; indica el parche donde esta el submarino para el recorrido en profundidad
+  movEspiral ; indica si el submarino se esta moviendo en espiral o no
+  gradosEspiral
 ]
 
 fugas-own [
@@ -45,12 +52,26 @@ fugas-own [
 ]
 
 
+patches-own 
+[ 
+  parent-patch ; patch's predecessor
+  f ; the value of knowledge plus heuristic cost function f()
+  g ; the value of knowledge cost function g()
+  h ; the value of heuristic cost function h()
 
+]
+
+; turtle variables used
+turtles-own
+[
+  path ; the optimal path from source to destination
+  current-path ; part of the path that is left to be traversed 
+  current-path-vuelta
+]
 
 
 to cargar
   clear-all
-  ;set listaDirecciones [0 45 90 135 180 225 270 315 360]
   ask patches [set pcolor blue] 
   set-default-shape submarinos "robot_submarino"
   set-default-shape manchas "petrol"
@@ -83,6 +104,8 @@ to cargar
     set irApetroleo false
     set idaVueltaBarco false
     set manchaDetec nobody
+    set movEspiral false
+
     set paso 0
     set current-path []
     set current-path-vuelta []
@@ -113,23 +136,12 @@ to cargar
       set posIniX posIniAreaX   ; En posIni guardo los valores pero se van modificando según donde quiera ir
       set posIniY posIniAreaY
     ]
-    
-    
+ 
+    ; Fijamos los límites de cada área de submarino
     set minX (int posX) 
     set maxX (int (posX + gapX))
     set minY (int (posY - gapY))
     set maxY (int posY)  
-    
-;    show "-------"
-;    show minX
-;    show maxX
-;    show minY
-;    show maxY
-
-;    show "-------"
-;    show who
-;    show posX
-;    show posY
       
     set posX (int (posX + gapX))
     set numElem (numElem + 1)
@@ -142,15 +154,11 @@ to cargar
   fd 0.5
   ]
   
-  ask patches [
-     set visitado false 
-  ]
-
   reset-ticks
 end
 
+
 to generarFuga
-  
   ifelse count fugas <= 9
   [
       create-fugas 1 [ inicializarFuga ]
@@ -158,41 +166,36 @@ to generarFuga
   [
     user-message( "Ya ha generado suficientes fugas. Espere a que se reparen para agregar más." )
   ]
-  
 end
 
-; draws the boundaries (walls) of the "billiard table"
+; Dibuja las paredes de rojo
 to draw-walls
-  ; draw left and right walls
+  ; paredes iz y dcha
   ask patches with [abs pxcor = max-pxcor]
     [ set pcolor red ]
-  ; draw top and bottom walls
+  ; paredes arriba y abajo
   ask patches with [abs pycor = max-pycor]
     [ set pcolor red]
 end
 
-; set random location
+
 to inicializarSubmarinos
   setxy 0 0
   set color yellow
-
-  ;set heading one-of listaDirecciones 
-  if pcolor = red       ; if it's on the wall...
-    [ inicializarSubmarinos ]        ; ...try again
-     ; ...try again
+  if pcolor = red       
+    [ inicializarSubmarinos ]       
 end
 
-; set random location
+
 to inicializarFuga
   setxy round random-xcor round random-ycor 
-  if xcor = 0 or ycor = 0 or pcolor = red; para no generar fugas en las perpendiculares ni bordes
+  if xcor = 0 or ycor = 0 or pcolor = red ; para no generar fugas en las perpendiculares ni bordes
   [
     inicializarFuga
   ]
   set posIniX xcor
   set posIniY ycor
   set heading dirViento
-  ;set heading one-of listaDirecciones 
   set hidden? true
   
   ifelse (count fugas-on neighbors >= 1) or (pcolor = red) or (pcolor = brown) or (count patches in-radius 5 with [pcolor = red] > 0)
@@ -228,6 +231,7 @@ to inicializarFuga
   ]
 end
 
+; Este método se encarga de comprobar en cada iteración si hay petróleo cerca del submarino
 to detectaPetroleo
   if petroleoDetectado = false 
   [
@@ -239,20 +243,23 @@ to detectaPetroleo
         [
           ifelse (manchaDetec = nobody)
           [
-            
             ifelse (count manchas-here = 1)
             [
               set manchaDetec manchas-here
               face manchaDetec
-              
             ]
             [
               set manchaDetec one-of manchas in-cone 4 90
               face manchaDetec
             ]
             show "Mancha detectada"
+            
+
+            set movEspiral false
+            
           ]
           [
+            set movEspiral false
             face manchaDetec
             ifelse [pcolor] of manchaDetec = gray
             [
@@ -288,9 +295,6 @@ to detectaPetroleo
             ]
             
             
-            
-            
-            ;facexy 0 0
             if (distancexy posIniX posIniY < 0.1)
             [  
               ask submarinos
@@ -304,14 +308,9 @@ to detectaPetroleo
               ifelse (dirViento >= 0) and (dirViento <= 180)
               [ set dirVientoOpuesto (dirViento + 180) ]
               [ set dirVientoOpuesto (dirViento - 180) ]
-              ;show dirViento
-              ;show dirVientoOpuesto
               set heading dirVientoOpuesto
               set posXPetrol xcor
               set posYPetrol ycor
-              ;show posXPetrol
-              ;show posYPetrol
-              ;show "--------*****-------"
               
               if (numFugas >= 1)
               [ 
@@ -326,92 +325,18 @@ to detectaPetroleo
                set manchaDetec nobody
             ]
             
-            
-            ;        ifelse current-path = []
-            ;          [
-            ;            let px 0
-            ;            let py 0
-            ;            ask manchaDetec [
-            ;              set px xcor
-            ;              set py ycor
-            ;            ]
-            ;            set posIniX round px
-            ;            set posIniY round py
-            ;            facexy px py
-            ;            caminoEntreDosPuntosA* round posIniX round posIniY
-            ;            set current-path remove-item 0 current-path
-            ;          ]
-            ;          [
-            ;            let casilla first current-path
-            ;            let px 0
-            ;            let py 0
-            ;            ask casilla [
-            ;              set px pxcor
-            ;              set py pycor 
-            ;            ]
-            ;            facexy px py
-            ;            if distancexy px py < 0.1
-            ;              [
-            ;                set current-path remove-item 0 current-path
-            ;              ]
-            ;            
-            ;            fd 0.1
-            ;            
-            ;            
-            ;            ;facexy 0 0
-            ;            if (distancexy posIniX posIniY < 0.1)
-            ;              [  
-            ;                set petroleoDetectado true
-            ;                set dirVientoOpuesto 0
-            ;                ifelse (dirViento >= 0) and (dirViento <= 180)
-            ;                [ set dirVientoOpuesto (dirViento + 180) ]
-            ;                [ set dirVientoOpuesto (dirViento - 180) ]
-            ;                ;show dirViento
-            ;                ;show dirVientoOpuesto
-            ;                set heading dirVientoOpuesto
-            ;                set posXPetrol xcor
-            ;                set posYPetrol ycor
-            ;                ;show posXPetrol
-            ;                ;show posYPetrol
-            ;                ;show "--------*****-------"
-            ;                
-            ;                if (numFugas >= 1)
-            ;                [ 
-            ;                  set buscandoFuga true
-            ;                  
-            ;                  
-            ;                ]   
-            ;              ]
-            ;            
-            ;          ]
           ]
+          
         ]
       
     ]
     
-    
-    
-     
   ]
 end
 
-to recorridoEnProfundidad
-   let arriba 0
-   let derecha 90
-   let abajo 180
-   let izquierda 270
-   
-   
-   set heading izquierda
-   if [visitado] of patch-ahead 1 = false and [pcolor] of patch-ahead 1 != red and [pcolor] of patch-ahead 1 != brown
-   [
-    ; set parcheActual
-   ]
-    
-end
-
+; Este método es el que se llama en cada iteración de la simulación 
 to go
-  if (ticks = 100000)  ; al cabo de un tiempo se levantan los limites de cada submarino
+  if (ticks = 50000)  ; al cabo de un tiempo se levantan los limites de cada submarino
   [
     ask submarinos [
       set maxX max-pxcor
@@ -419,19 +344,21 @@ to go
       set minX max-pxcor * -1
       set minY max-pycor * -1
     ]
+    show "A partir de ahora, cada submarino puede explorar libremente el mapa."
     
   ]
   
-  ask submarinos [
-    ifelse dejar_rastro?             ;; the turtle puts its pen up or down depending on the
-      [ pd ]                        ;; value of the LEAVE-TRACE? switch
+  ask submarinos [ ; analizo cada submarino para ver que movimiento tengo que hacer
+    ifelse dejar_rastro?             
+      [ pd ]                        
       [ pu ]
      
     detectaPetroleo
      
-    ifelse petroleoDetectado = true 
+    ; dependiendo del estado del submarino hago una cosa u otra
+    ifelse petroleoDetectado = true ; si algún submarino detectó petróleo
     [
-      ifelse buscandoFuga = true
+      ifelse buscandoFuga = true ; si ese submarino detectó el petróleo y ahora está buscando la fuga
       [
         let fugaEncontrada false
         let posXSubma xcor
@@ -467,8 +394,7 @@ to go
               face fugaDetec
             ]
             
-          ]
-          
+          ] 
           
         ]
         
@@ -485,7 +411,7 @@ to go
               ifelse ([pcolor] of patch-ahead 1 = red) or (count other patches in-cone 1.5 180 with [pcolor = green] > 0) or ([pcolor] of patch-ahead 1 = brown)
                 [  
                   set numChoques (numChoques + 1)
-                  ifelse numChoques  < 4
+                  ifelse numChoques  < 3
                   [
                     ifelse heading = dirViento
                     [
@@ -499,34 +425,6 @@ to go
                     
                     ifelse all? submarinos [color = yellow]
                     [ 
-                      
-                      
-                      ;                     ifelse length nuevosDescubrimientosPetrol = 0  ; Si no se descubieron nuevos vertidos
-                      ;                     [
-                      ;                       ask patchFuga [ set pcolor blue ]
-                      ;                       set petroleoDetectado false
-                      ;                       set caminoCreado false
-                      ;                       set creandoCamino false
-                      ;                       ask submarinos [
-                      ;                         set limpiezaIniciada false 
-                      ;                         set buscandoFuga false
-                      ;                         set busquedaIniciada false
-                      ;                         set posIniX posIniAreaX   ; En posIni guardo los valores pero se van modificando según donde quiera ir
-                      ;                         set posIniY posIniAreaY
-                      ;                       ]
-                      ;                       
-                      ;                     ]
-                      ;                     [  ; si se descubrieron ir 
-                      ;                       
-                      ;                        let nuevoVertido first nuevosDescubrimientosPetrol
-                      ;                        set nuevosDescubrimientosPetrol remove-item 0 nuevosDescubrimientosPetrol
-                      ;                        ask nuevoVertido [
-                      ;                          set posXPetrol pxcor
-                      ;                          set posYPetrol pycor
-                      ;                          set petroleoDetectado true
-                      ;                        ]
-                      ;                     ]
-                      
                       
                       if is-fuga? patchFuga
                       [
@@ -543,9 +441,7 @@ to go
                         set busquedaIniciada false
                         set posIniX posIniAreaX   ; En posIni guardo los valores pero se van modificando según donde quiera ir
                         set posIniY posIniAreaY
-                      ]
-                      
-                      
+                      ]     
                       
                     ]
                     [
@@ -573,12 +469,6 @@ to go
                   ]
                 ]
                 [
-                  ; AQUI ERRORRRRRRRRRRR
-;                  if color = black
-;                  [
-;                   set color yellow 
-;                  ]
-                  ;---------------------
                   
                   let tocoIsla false
                   if [pcolor] of patch-ahead 1 = brown
@@ -630,24 +520,6 @@ to go
               ]
               [
                 idaYvueltaBarcoA*
-                
-                
-;                ifelse idaVueltaBarco = true
-;                [
-;                  idaYvueltaBarcoA*
-;                ]
-;                [
-;                  ifelse ((round pxcor = round posXPetrol) and (round pycor = round posYPetrol)) 
-;                  [    
-;                    set idaVueltaBarco true 
-;                  ]
-;                  [
-;                    facexy posXPetrol posYPetrol
-;                    fd 0.1
-;                  ]
-;                ]
-                
-                
               ]      
             ]
             
@@ -658,28 +530,43 @@ to go
         
       ]
       
-    ]  ; si no detecta petróleo
+    ]  ; si ningún submarino ha detectado petróleo
     [
       ifelse busquedaIniciada = true 
         [
+         
+          if (ticks mod 1000 = 0) and (movEspiral = false) and (movimiento_espiral? = true)
+          [
+             set movEspiral true 
+             set gradosEspiral 360
+             set heading 0
+        
+          ]
           
-;          if (pxcor = max-pxcor * -1)
-;            [ facexy 0 (max-pycor * -1)]
+          if (movEspiral = true)
+          [
+            if heading = 0
+            [
+              set gradosEspiral (gradosEspiral / 2)
+            ]
+            
+            set heading (heading + gradosEspiral) 
+        
+          ]
+
+
           rebotarSubmarino
-          
-          
-          ;    show who
-          ;    show heading
-          ;    rebotarSubmarino
-          ;    show who
-          ;    show heading
-          ;    show "-----"
           
           
           let tocoIsla false
           if [pcolor] of patch-ahead 1 = brown
-          ; if so, reflect heading around x axis
-            [  set tocoIsla true   ]
+          [  
+            set tocoIsla true   
+            if (movEspiral = true)
+            [
+              set movEspiral false
+            ]
+          ]
           
           if tocoIsla = true [
             while [[pcolor] of patch-ahead 0.3 = brown] [
@@ -699,7 +586,7 @@ to go
     
   ] ; fin de ask submarinos
   
-  if (ticks mod 200 = 0) 
+  if (ticks mod 200 = 0) ; cada 200 iteraciones se crean manchas que salen de las fugas
   [
     let fugasLista []
     set fugasLista lput patches with [pcolor = gray and pxcor != 0 and pycor != 0] fugasLista
@@ -730,7 +617,7 @@ to go
   
 
 
-  ask manchas [
+  ask manchas [ ; muevo las machas
       ifelse pcolor = blue
       [
             ;set pcolor black 
@@ -741,64 +628,19 @@ to go
       ]
     
   ]
-  
 
-  
-  tick
+  tick  ; aumenta el contador de iteración
 end
 
-to deteccionNuevaMancha
-  
-  let manchaDetectada other manchas in-cone 1 180 with [color = black]
-  let numeroManchas count manchaDetectada
-  if numeroManchas > 0
-    [ 
-      let cercano min-one-of manchaDetectada [distance myself] 
-      ifelse (cercaniaFuga > distance cercano)
-        [
-          set cercaniaFuga distance cercano
-        ] 
-        [
-          if not member? patches with [pxcor = round posX and pycor = round posY] nuevosDescubrimientosPetrol
-          [
-            set nuevosDescubrimientosPetrol lput patches with [pxcor = round posX and pycor = round posY] nuevosDescubrimientosPetrol
-          ]
-          
-          
-          
-          set cercaniaFuga 100
-;          set petroleoDetectado true
-;          set dirVientoOpuesto 0
-;          ifelse (dirViento >= 0) and (dirViento <= 180)
-;            [ set dirVientoOpuesto (dirViento + 180) ]
-;            [ set dirVientoOpuesto (dirViento - 180) ]
-;          ;show dirViento
-;          ;show dirVientoOpuesto
-;          set heading dirVientoOpuesto
-          
-;          show posXPetrol
-;          show posYPetrol
-;          show "--------*****-------"
-;          if (numFugas >= 1)
-;            [ 
-;              set buscandoFuga true
-;              
-;            ]
-        ]           
-    ]
-end
-
-
+; Método que calcula el camino entre dos puntos utilizando el algoritmo A* y lo guarda en la varible path del submarino que lo llamó
 to caminoEntreDosPuntosA* [puntoX puntoY]
    set posX xcor
    set posY ycor
-   show puntoX
-   show puntoY
-   show "-------"
    set path busca-Camino one-of patches with [pxcor = round posX and pycor = round posY] one-of patches with [pxcor = puntoX and pycor = puntoY]
    set current-path path
 end
 
+; Método que realiza los movimientos de ida y vuelta al barco desde el derrame utilizando el algoritmo A*
 to idaYvueltaBarcoA*
   ifelse irApetroleo = false   ; Si va del petroleo al barco
     [
@@ -846,8 +688,7 @@ to idaYvueltaBarcoA*
       irInicioLimpieza
       
       if length current-path = 0
-        [ ;_______________________________________________________________________________________________________
-          ;set limpiezaIniciada true 
+        [ 
           
           ifelse (count neighbors with [pcolor = green] = 1)
             [
@@ -857,9 +698,7 @@ to idaYvueltaBarcoA*
               set irApetroleo false
               
               set idaVueltaBarco false
-              
               set numChoques 0 
-              ;*****************************************************************************
               set transporteIniciado false
             ]
             [
@@ -873,7 +712,6 @@ to idaYvueltaBarcoA*
                   set idaVueltaBarco false
                   
                   set numChoques 0 
-                  ;*****************************************************************************
                   set transporteIniciado false
                   
                 ]
@@ -887,7 +725,6 @@ to idaYvueltaBarcoA*
                   set idaVueltaBarco false
                   
                   set numChoques 0
-                  ;*****************************************************************************
                   set transporteIniciado false
                   if (count other patches in-cone 1.5 180 with [pcolor = green] > 0)
                   [
@@ -897,193 +734,14 @@ to idaYvueltaBarcoA*
               
             ]
           
-          
         ]
       
     ]
   
-  
-end
-
-to idaYvueltaBarcoA2*
-  ; Mientras haces la ida y vuelta compruebas si detecta nuevo vertido y guarda su posicion
-  ;deteccionNuevaMancha
-  
-
-  set numChoques 0
-  ifelse caminoCreado = false
-    [
-      ifelse creandoCamino = false
-      [
-        ifelse ((round pxcor = round posXPetrol) and (round pycor = round posYPetrol)) 
-        [  
-          set creandoCamino true
-          encuentraCaminoA* 
-          set current-path remove-item 0 current-path
-          
-        ]
-        [
-          facexy posXPetrol posYPetrol
-          fd 0.1
-        ] 
-      ] 
-      [
-         facexy posXPetrol posYPetrol
-         fd 0.1
-      ]     
-    ]
-    [
-      ifelse irApetroleo = false   ; Si va del petroleo al barco
-        [
-          if length current-path = 0
-            [
-              ;show "--- copia "
-              ;show optimal-path
-              set current-path optimal-path
-              set current-path-vuelta  reverse optimal-path  
-            ]
-          
-          let casilla first current-path
-          let px 0
-          let py 0
-          ask casilla [
-             set px pxcor
-             set py pycor 
-          ]
-          facexy px py
-          if distancexy px py < 0.1
-          [
-            set current-path remove-item 0 current-path
-          ]
-          
-          fd 0.1
-;          face first current-path
-;          ifelse paso = 10
-;            [
-;              
-;              face first current-path
-;              set current-path remove-item 0 current-path
-;              set paso 0
-;            ]
-;            [
-;              fd 0.1
-;              set paso (paso + 1)
-;              
-;            ]
-          
-          
-          
-          ;facexy 0 0
-          if ((round xcor = 0) and (round ycor = 0)) 
-            [  
-              ;set limpiezaIniciada false 
-              ;set transporteIniciado true
-              set irApetroleo true
-              set current-path []
-              set numChoques 0
-              set color yellow      
-            ]
-  
-          
-          
-          
-        ]
-        [  ; Si va del barco al petroleo
-          ifelse length current-path-vuelta = 0
-            [ ;_______________________________________________________________________________________________________
-              ;set limpiezaIniciada true 
-              
-              ifelse (count neighbors with [pcolor = green] = 1)
-              [
-                set heading dirViento
-                set limpiezaIniciada true 
-                set busquedaIniciada true
-                set irApetroleo false
-                
-                set idaVueltaBarco false
-                
-                set numChoques 0 
-                ;*****************************************************************************
-                set transporteIniciado false
-              ]
-              [
-                ifelse ((who mod 2) = 0) 
-                [
-                  set heading dirViento
-                  set limpiezaIniciada true 
-                  set busquedaIniciada true
-                  set irApetroleo false
-                  
-                  set idaVueltaBarco false
-                  
-                  set numChoques 0 
-                  ;*****************************************************************************
-                  set transporteIniciado false
-                  
-                ]
-                [
-                  set heading dirVientoOpuesto
-                  
-                  set limpiezaIniciada true 
-                  set busquedaIniciada true
-                  set irApetroleo false
-                  
-                  set idaVueltaBarco false
-                  
-                  set numChoques 0
-                  ;*****************************************************************************
-                  set transporteIniciado false
-                  if (count other patches in-cone 1.5 180 with [pcolor = green] > 0)
-                  [
-                    set heading dirViento
-                  ]
-                ]
-                
-              ]
-              
-              
-            ]
-            [        
-              
-              let casilla first current-path-vuelta
-              let px 0
-              let py 0
-              ask casilla [
-                set px pxcor
-                set py pycor 
-              ]
-              facexy px py
-              if distancexy px py < 0.1
-              [
-                set current-path-vuelta remove-item 0 current-path-vuelta
-              ]
-              
-              fd 0.1
-              
-              
-              
-;              face first current-path-vuelta
-;              ifelse paso = 10
-;                [
-;                  
-;                  face first current-path-vuelta
-;                  set current-path-vuelta remove-item 0 current-path-vuelta
-;                  set paso 0
-;                ]
-;                [
-;                  fd 0.1
-;                  set paso (paso + 1)
-;                  
-;                ]
-            ]
-          
-        ]
-      
-    ] 
 end
 
 
-
+; Método que permite ir a un submarino al barco de forma aleatoria
 to irAbarco
   if evitarIsla = false 
     [ 
@@ -1142,6 +800,7 @@ to irAbarco
      ]
 end
 
+; Método que permite a un submarino ir a un lugar donde se detectó un derrame
 to irInicioLimpieza
   ifelse movimiento_entre_dos_puntos = "Aleatorio"
   [
@@ -1195,13 +854,8 @@ to irInicioLimpieza
       
       fd 0.1 
     ]
-    ;    show round pxcor
-    ;    show round posIniX
-    ;    show round pycor
-    ;    show round posIniY
-    ;    show "-----------"
+
     if (distancexy posIniX posIniY < 0.1)
-    ; if ((round pxcor = round posIniX) and (round pycor = round posIniY)) 
       [  
         set limpiezaIniciada true 
         set numChoques 0
@@ -1221,15 +875,13 @@ to irInicioLimpieza
         ]                
       ]
   ]
-  [
-    ;show "HOLA"
-    ifelse current-path = []
+  [  ; Si el movimiento es usando el algoritmo A*
+
+    ifelse current-path = [] ; Si no hemos calculado el camino
     [
       set posIniX round posXPetrol
       set posIniY round posYPetrol
       
-     ; caminoEntreDosPuntosA* round posIniX round posIniY
-     ; set current-path remove-item 0 current-path
       
       ifelse irApetroleo = true ; si va del barco al petroleo
       [
@@ -1261,7 +913,7 @@ to irInicioLimpieza
       ]
       
     ]
-    [
+    [  ; Si ya tenemos el camino
       let casilla first current-path
       let px 0
       let py 0
@@ -1278,8 +930,7 @@ to irInicioLimpieza
       
       fd 0.1
       
-      
-      ;facexy 0 0
+
       if (distancexy posIniX posIniY < 0.1)
         [  
           set current-path []
@@ -1310,7 +961,7 @@ to irInicioLimpieza
   
 end
 
-
+; Método que mueve el submarino hasta su zona de limpieza
 to iraPunto
   ifelse movimiento_entre_dos_puntos = "Aleatorio"
   [
@@ -1337,8 +988,6 @@ to iraPunto
       set movimientosEvitar (movimientosEvitar + 10)
     ]
     
-    
-    
     ifelse evitarIsla = true 
     [
       fd 0.1
@@ -1364,11 +1013,6 @@ to iraPunto
      
       fd 0.1 
     ]
-;    show round pxcor
-;    show round posIniX
-;    show round pycor
-;    show round posIniY
-;    show "-----------"
     
      if ((round pxcor >= round minX) and (round pxcor <= round maxX) and (round pycor >= round minY) and (round pycor <= round maxY)) 
      [  
@@ -1376,7 +1020,7 @@ to iraPunto
         set numChoques 0        
      ]
   ]
-  [
+  [ ; Si el movimiento es usando A*
     ifelse current-path = []
     [
       set posIniX posIniAreaX
@@ -1403,8 +1047,6 @@ to iraPunto
       
       fd 0.1
       
-      
-      ;facexy 0 0
      if ((round pxcor >= round minX) and (round pxcor <= round maxX) and (round pycor >= round minY) and (round pycor <= round maxY)) 
         [  
           set busquedaIniciada true  
@@ -1418,93 +1060,21 @@ to iraPunto
 end
 
 
-;; this procedure checks the coordinates and makes the turtles
-;; reflect according to the law that the angle of reflection is
-;; equal to the angle of incidence
+; Este método reorienta el submarino cuando llega a un obstáculo o límite de área
 to rebotarSubmarino  ;; turtle procedure
-  ; check: hitting left or right wall?
-  ;if abs [pxcor] of patch-ahead 0.1 = max-pxcor
-    ; if so, reflect heading around x axis
-    ;[ set heading (- heading) ]
-    ;[ set heading  one-of listaDirecciones  ]
-  ; check: hitting top or bottom wall?
-  ;if abs [pycor] of patch-ahead 0.1 = max-pycor
-    ; if so, reflect heading around y axis
-    ;[ set heading (180 - heading) ]
-    ;[ set heading one-of listaDirecciones ]
     
   if manchaDetec = nobody 
   [ 
-     
-;    let casilla patch-ahead 0.5
-;     if ([pxcor] of casilla >= maxX) 
-;    [ 
-;      while [[pxcor] of casilla >= maxX] [
-;        set heading random 360
-;        set casilla patch-ahead 0.5
-;      ] 
-;    ]
-;    
-;    if ([pxcor] of casilla <= minX) 
-;    [ 
-;      while [[pxcor] of casilla <= minX] [
-;        set heading random 360
-;        set casilla patch-ahead 0.5
-;      ] 
-;    ]
-;    
-;    if ([pycor] of casilla >= maxY) 
-;    [
-;      while [[pycor] of casilla >= maxY] [
-;        set heading random 360
-;        set casilla patch-ahead 0.5
-;      ] 
-;    ]
-;    
-;    if ([pycor] of casilla <= minY) 
-;    [ 
-;      while [[pycor] of casilla <= minY] [
-;        set heading random 360
-;        set casilla patch-ahead 0.5
-;      ] 
-;    ]
-    
-    
-;    if ([pxcor] of patch-ahead 1 > maxX) 
-;    [ 
-;      while [[pxcor] of patch-ahead 1 > maxX] [
-;        set heading random 360
-;      ] 
-;    ]
-;    
-;    if [pxcor] of patch-ahead 1 < minX
-;    [ 
-;      while [[pxcor] of patch-ahead 1 < minX] [
-;        set heading random 360
-;      ] 
-;    ]
-;    
-;    if [pycor] of patch-ahead 1 > maxY
-;    [
-;      while [[pycor] of patch-ahead 1 > maxY] [
-;        set heading random 360
-;      ] 
-;    ]
-;    
-;    if [pycor] of patch-ahead 1 < minY
-;    [ 
-;      while [[pycor] of patch-ahead 1 < minY] [
-;        set heading random 360
-;      ] 
-;    ]
-    
-    
-    
      if ([pxcor] of patch-ahead 1 > maxX) 
     [ 
       while [[pxcor] of patch-ahead 1 > maxX] [
          set heading random 360
       ] 
+      
+      if (movEspiral = true)
+      [
+        set movEspiral false
+      ]
     ]
     
   if [pxcor] of patch-ahead 1 < minX
@@ -1512,6 +1082,11 @@ to rebotarSubmarino  ;; turtle procedure
       while [[pxcor] of patch-ahead 1 < minX] [
          set heading random 360
       ] 
+      
+      if (movEspiral = true)
+      [
+        set movEspiral false
+      ]
     ]
     
   if [pycor] of patch-ahead 1 > maxY
@@ -1519,6 +1094,11 @@ to rebotarSubmarino  ;; turtle procedure
       while [[pycor] of patch-ahead 1 > maxY] [
          set heading random 360
       ] 
+      
+      if (movEspiral = true)
+      [
+        set movEspiral false
+      ]
     ]
     
   if [pycor] of patch-ahead 1 < minY
@@ -1526,29 +1106,39 @@ to rebotarSubmarino  ;; turtle procedure
       while [[pycor] of patch-ahead 1 < minY] [
          set heading random 360
       ] 
+      
+      if (movEspiral = true)
+      [
+        set movEspiral false
+      ]
     ]
-    
-    
-
-    
   ]
-    
-    while [[pcolor] of patch-ahead 1 = red] [
-         set heading random 360
-       ]
-
+  
+  if [pcolor] of patch-ahead 1 = red
+  [
+      if (movEspiral = true)
+      [
+        set movEspiral false
+      ]
+  ]
+  
+  
+  while [[pcolor] of patch-ahead 1 = red] [
+    set heading random 360
+  ]
+  
 end
 
-
+; Este método mueve cada mancha por el mapa y la mata si llega a un obstáculo
 to mueveMancha ;; turtle procedure
-  ; check: hitting left or right wall?
+
   let tocoBorde false
   if abs [pxcor] of patch-ahead 1 = max-pxcor
     ; if so, reflect heading around x axis
     [  set tocoBorde true  
        die
     ]
-  ; check: hitting top or bottom wall?
+
   if abs [pycor] of patch-ahead 1 = max-pycor
     [  
       set tocoBorde true          
@@ -1569,14 +1159,10 @@ to mueveMancha ;; turtle procedure
     
 end
 
-
+; Método para dibujar obstáculos con el ratón
 to dibujar_Isla
-  if mouse-down?     ;; reports true or false to indicate whether mouse button is down
+  if mouse-down?     
     [
-      ;; mouse-xcor and mouse-ycor report the position of the mouse --
-      ;; note that they report the precise position of the mouse,
-      ;; so you might get a decimal number like 12.3, but "patch"
-      ;; automatically rounds to the nearest patch
       display
       ask patch mouse-xcor mouse-ycor
         [ set pcolor brown ]
@@ -1584,12 +1170,10 @@ to dibujar_Isla
   
 end
 
+; Método para dibujar fugas con el ratón
 to dibujaFuga
-  
-  
-  if mouse-down? and fugaDibujada = false   ;; reports true or false to indicate whether mouse button is down
+  if mouse-down? and fugaDibujada = false  
     [
-     
       create-fugas 1 [
           set xcor mouse-xcor
           set ycor mouse-ycor
@@ -1617,29 +1201,6 @@ end
 ; *************************************************
 
 
-; patch variables used
-patches-own 
-[ 
-  parent-patch ; patch's predecessor
-  f ; the value of knowledge plus heuristic cost function f()
-  g ; the value of knowledge cost function g()
-  h ; the value of heuristic cost function h()
-  visitado 
-]
-
-; turtle variables used
-turtles-own
-[
-  path ; the optimal path from source to destination
-  current-path ; part of the path that is left to be traversed 
-  current-path-vuelta
-]
-
-
-
-
-; call the path finding procedure, update the turtle (agent) variables, output text box
-; and make the agent move to the destination via the path found
 to encuentraCaminoA*
     set posX xcor
     set posY ycor
@@ -1655,22 +1216,14 @@ to encuentraCaminoA*
 end
 
 
-; the actual implementation of the A* path finding algorithm
-; it takes the source and destination patches as inputs
-; and reports the optimal path if one exists between them as output
 to-report busca-Camino [ source-patch destination-patch] 
    output-show (word "Buscando camino con el algoritmo A*")
-  ; initialize all variables to default values
   let search-done? false
   let search-path []
   let current-patch 0
   set open []
   set closed []  
   
-  ;show source-patch 
-  ;show destination-patch
-  
-  ; add source patch in the open list
   set open lput source-patch open
   
   ; loop until we reach the destination or the open list becomes empty
@@ -1706,8 +1259,6 @@ to-report busca-Camino [ source-patch destination-patch]
             ; destination patches or already a part of the open list (unexplored patches list)
             if not member? self open and self != source-patch and self != destination-patch
             [
-             
-              
               ; add the eligible patch to the open list
               set open lput self open
               
@@ -1758,7 +1309,6 @@ to-report busca-Camino [ source-patch destination-patch]
   ; source patch and ends at the destination patch
   set search-path reverse search-path  
 
-  ;show "Camino obtenido!! "
   ; report the search path
   output-show (word "Camino obtenido")
   report search-path
@@ -1802,7 +1352,6 @@ to go-to-next-patch-in-current-path
     set paso (paso + 1)
     display
   ]
- 
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -1834,9 +1383,9 @@ ticks
 
 BUTTON
 18
-52
+18
 88
-86
+52
 Cargar
 cargar
 NIL
@@ -1851,9 +1400,9 @@ NIL
 
 BUTTON
 124
-52
+18
 190
-86
+52
 Iniciar
 go
 T
@@ -1867,10 +1416,10 @@ NIL
 1
 
 SWITCH
-18
-111
-147
-144
+17
+64
+146
+97
 dejar_rastro?
 dejar_rastro?
 1
@@ -1886,7 +1435,7 @@ numeroSubmarinos
 numeroSubmarinos
 2
 20
-10
+2
 2
 1
 NIL
@@ -1952,6 +1501,17 @@ movimiento_entre_dos_puntos
 movimiento_entre_dos_puntos
 "Aleatorio" "Algoritmo A*"
 1
+
+SWITCH
+15
+117
+181
+150
+movimiento_espiral?
+movimiento_espiral?
+0
+1
+-1000
 
 @#$#@#$#@
 ## WHAT IS IT?
