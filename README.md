@@ -22,3 +22,7 @@ NetLogo is a functional programming language [22] with “turtles” that repres
 In practice, the fact that NetLogo uses a functional programming language means that many language statements are almost read as sentences, and this enables even unskilled and untrained users to understand and learn it through the examples.
 
 * [Netlogo](https://ccl.northwestern.edu/netlogo/)
+
+## Website to try simulation
+
+* [Submarine Multi Agents](http://alu0100694765.github.io/Submarine-multiagent/index.html)
